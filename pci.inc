@@ -22,3 +22,25 @@ dwAddr  dd ?	; bits 2-31: physical address of MSI write transaction; bits 0-1: 0
 		dd ?	; for 64-bit address
 wData   dw ?	; msg data; may be 1/2/4/8/16/32 
 MSICAP ends
+
+;--- capability types
+PCICAPID_PM  equ 1	; 1 power management
+PCICAPID_AGP equ 2	; 2 AGP controller
+PCICAPID_VPD equ 3	; 3 "vital product data"
+PCICAPID_SI  equ 4	; 4 slot identification
+PCICAPID_MSI equ 5	; 5 message signaled interrupt (MSI)
+PCICAPID_HS  equ 6	; 6 CompactPCI hot swap
+PCICAPID_PCIX equ 7	; 7 PCI-X
+PCICAPID_HT  equ 8	; 8 HyperTransport
+PCICAPID_VS  equ 9	; 9 Vendor Specific
+PCICAPID_DP  equ 10	;10 Debug port
+PCICAPID_CRC equ 11	;11	CompactPCI central resource control
+PCICAPID_HP  equ 12	:12 Hot Plug
+PCICAPID_BS  equ 13	;13 bridge subsystem
+PCICAPID_A8  equ 14	;14 AGP 8x
+PCICAPID_SD  equ 15	;15 Secure Device
+PCICAPID_PCIE equ 16;16 PCI Express
+PCICAPID_MSIX equ 17;17 MSI-X
+PCICAPID_DIC equ 18	;18 SATA Data/Index Configuration
+PCICAPID_AF  equ 19	;19 Advanced Features
+

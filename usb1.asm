@@ -16,14 +16,48 @@ sym db text,0
 	exitm <offset sym>
 endm
 
+DStr macro text:vararg
+local sym
+	.const
+sym db text,0
+	.data
+	exitm <offset sym>
+endm
+
 @pe_file_flags = @pe_file_flags and not 1	;create binary with base relocations
 
 	include dpmi.inc
+	include ehci.inc
+	include xhci.inc
 
 	.data
 
 rmstack dd ?
 bVerbose db 0
+
+	align 4
+capstrgs label dword
+	dd 0
+	dd DStr("Power Management")
+	dd DStr("AGP controller")
+	dd DStr("vital product data")
+	dd DStr("slot identification")
+	dd DStr("MSI")
+	dd DStr("CompactPCI hot swap")
+	dd DStr("PCI-X")
+	dd DStr("HyperTransport")
+	dd DStr("Vendor Specific")
+	dd DStr("Debug port")
+	dd DStr("CompactPCI central resource control")
+	dd DStr("Hot Plug")
+	dd DStr("bridge subsystem")
+	dd DStr("AGP 8x")
+	dd DStr("Secure Device")
+	dd DStr("PCIe")
+	dd DStr("MSI-X")
+	dd DStr("SATA Data/Index Configuration")
+	dd DStr("Advanced Features")
+NUMCAPSTR equ ($ - offset capstrgs) / 4
 
 	.CODE
 
@@ -64,19 +98,78 @@ local rmcs:RMCS
 	ret
 int_1a endp
 
-displayuhci proc uses ebx esi edi dwAddr:dword
+displayuhci proc uses ebx esi edi dwAddr:dword, dwPhys:dword
 	ret
 displayuhci endp
 
-displayohci proc uses ebx esi edi dwAddr:dword
+displayohci proc uses ebx esi edi dwAddr:dword, dwPhys:dword
 	ret
 displayohci endp
 
-displayehci proc uses ebx esi edi dwAddr:dword
+displayehci proc uses ebx esi edi dwLinear:dword, dwPhys:dword
+	mov ebx, dwLinear
+	invoke printf, CStr("Capability Registers:",lf)
+	invoke printf, CStr(" Length: %u",lf), [EBX].EHCICAP.bLength
+	invoke printf, CStr(" Version: 0x%X",lf), [EBX].EHCICAP.wVersion
+	invoke printf, CStr(" Structural Params: 0x%X",lf), [EBX].EHCICAP.dwSParams
+	invoke printf, CStr(" Capability Params: 0x%X",lf), [EBX].EHCICAP.dwCParams
+	invoke printf, CStr(" Companion Port Route: 0x%X",lf), [EBX].EHCICAP.dwCPRD
 	ret
 displayehci endp
 
-displayxhci proc uses ebx esi edi dwAddr:dword
+displayxhci proc uses ebx esi edi dwLinear:dword, dwPhys:dword
+	mov ebx, dwLinear
+	invoke printf, CStr(" Capability Registers:",lf)
+	invoke printf, CStr("  Length: %u",lf), [EBX].XHCICAP.bLength
+	invoke printf, CStr("  Version: 0x%",lf), [EBX].XHCICAP.wVersion
+	invoke printf, CStr("  Structural Params 1: 0x%X "), [EBX].XHCICAP.dwSParams1
+	mov eax, [EBX].XHCICAP.dwSParams1
+	mov ecx, eax
+	mov edx, eax
+	and eax, 0ffh	; # of slots
+	shr ecx, 8
+	and ecx, 7ffh	; # of Interruptors; bits 8-18
+	shr edx, 23		; # of ports
+	invoke printf, CStr("( %u slots, %u interruptors, %u ports )", lf), eax, ecx, edx
+	
+	invoke printf, CStr("  Structural Params 2: 0x%X",lf), [EBX].XHCICAP.dwSParams2
+	invoke printf, CStr("  Structural Params 3: 0x%X",lf), [EBX].XHCICAP.dwSParams3
+	invoke printf, CStr("  Capability Params 1: 0x%X"), [EBX].XHCICAP.dwCParams1
+	mov eax, [EBX].XHCICAP.dwCParams1
+	shr eax, 16
+	shl eax, 2
+	add eax, dwPhys
+	invoke printf, CStr(" (extended Capabilities at 0x%X)",lf), eax
+	invoke printf, CStr("  DoorBell Offset: 0x%X",lf), [EBX].XHCICAP.dwDBOfs
+	invoke printf, CStr("  Runtime Register Space Offset: 0x%X",lf), [EBX].XHCICAP.dwRTSOfs
+	invoke printf, CStr("  Capability Params 2: 0x%X",lf), [EBX].XHCICAP.dwCParams2
+
+	invoke printf, CStr(" Operational Registers:",lf)
+	movzx eax, [EBX].XHCICAP.bLength
+	add ebx, eax
+	invoke printf, CStr("  Command: 0x%X",lf), [EBX].XHCIOP.dwUsbCmd
+	invoke printf, CStr("  Status: 0x%X",lf), [EBX].XHCIOP.dwUsbSts
+
+;--- supported page sizes are a bit field, with bit 0=1 meaning 4kB
+	invoke printf, CStr("  Page Sizes: 0x%X ("), [EBX].XHCIOP.dwPgSize
+	mov eax, [EBX].XHCIOP.dwPgSize
+	mov ecx, 1
+	xor edi, edi
+	.while cx
+		.if ( cx & ax)
+			pushad
+			shl ecx, 12
+			.if edi
+				invoke printf, CStr(",")
+			.endif
+			invoke printf, CStr("0x%X"), ecx
+			inc edi
+			popad
+		.endif
+		shl cx, 1
+	.endw
+	invoke printf, CStr(")",lf)
+
 	ret
 displayxhci endp
 
@@ -87,6 +180,7 @@ local dwPhysBase:dword
 local satacap:byte
 local status:word
 
+	invoke printf, CStr(" PCI config space:",lf)
 	mov ebx,path
 	mov edi,0
 	mov ax,0B10Ah
@@ -102,7 +196,7 @@ if 1
 	call int_1a
 	.if ah == 0
 		movzx ecx,cx
-		invoke printf, CStr("  CMD=0x%X ([0]=IOSE,[1]=MSE (Memory Space Enable),[2]=BME (Bus Master Enable)",lf), ecx
+		invoke printf, CStr("  CMD=0x%X ([0]=IOSE,[1]=MSE,[2]=BME)",lf), ecx
 	.endif
 endif
 	mov edi,6		;PCI STS (device status
@@ -128,9 +222,13 @@ endif
 				movzx eax,ch
 				movzx ecx,cl
 				mov edi, eax
-				invoke printf, CStr("  capabilities ID=0x%X, next pointer=0x%X",lf), ecx, eax
-				.break .if edi == 0
-			.until 0
+				.if ecx < NUMCAPSTR
+					mov eax, [ecx*4][capstrgs]
+				.else
+					mov eax, CStr("unknown")
+				.endif
+				invoke printf, CStr("  capabilities ID=0x%X (%s)",lf), ecx, eax
+			.until edi == 0
 		.endif
 	.endif
 
@@ -150,8 +248,8 @@ endif
 	mov dwPhysBase, ecx
 	push ecx
 	invoke printf, CStr("  Controller Base Address=0x%X",lf), ecx
-	pop bx
 	pop cx
+	pop bx
 	mov si,0000h
 	mov di,1000h
 	mov ax,0800h
@@ -161,19 +259,28 @@ endif
 	push cx
 	pop ebx
 
+	mov edi, dwPhysBase
 	mov eax,dwClass
 	and al,0F0h
 	.if al == 00h
-		invoke displayuhci, ebx
+		invoke displayuhci, ebx, edi
 	.elseif al == 10h
-		invoke displayohci, ebx
+		invoke displayohci, ebx, edi
 	.elseif al == 20h
-		invoke displayehci, ebx
+		invoke displayehci, ebx, edi
 	.elseif al == 30h
-		invoke displayxhci, ebx
+		invoke displayxhci, ebx, edi
 	.else
 		invoke printf, CStr("unknown USB controller type (class=0x%06X)",lf), dwClass
 	.endif
+	invoke printf, CStr(lf)
+
+	push ebx
+	pop cx
+	pop bx
+	mov ax,0801h
+	int 31h
+
 exit:
 	ret
 disppci endp

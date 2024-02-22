@@ -10,7 +10,7 @@
 DISPVENDOR equ 1	;1=display vendor ID/device code
 DISPSSID   equ 1	;1=display subsystem vendor/version
 
-CAPID_MSI	equ 5	; MSI capability type
+	include pci.inc
 
 lf equ 10
 
@@ -173,7 +173,7 @@ if DISPVENDOR
 	db "subsysID     = subsystem vendor ID/subsystem ID",lf
  endif
 endif
-	db "IRQ          = interrupt line",lf
+	db "INT          = interrupt line/pin",lf
 	db "MSI          = MSI status (y=MSI supported, E=MSI enabled)",lf
 	db 0
 
@@ -185,7 +185,7 @@ if DISPVENDOR
 	db "subsysID  "
  endif
 endif
-	db "IRQ MSI",lf
+	db "INT  MSI",lf
 	db "------------------------------------------------------------------------",lf
 	db 0
 
@@ -264,7 +264,7 @@ if DISPVENDOR
  endif
 endif
 
-;--- get IRQ
+;--- get interrupt line/pin
 	mov eax, [bp].PUSHADS._ecx
 	mov al, 3Ch
 	mov dx, [bp].PUSHADS._dx
@@ -272,10 +272,11 @@ endif
 	add dx, 4
 	in eax, dx
 	.if al != 0 && al != -1
-		movzx eax, al
-		invoke printf, CStr("  %2u "), ax
+		movzx dx, ah
+		movzx ax, al
+		invoke printf, CStr(" %2u/%u "), ax, dx
 	.else
-		invoke printf, CStr("     ")
+		invoke printf, CStr("      ")
 	.endif
 
 if 1;DISPMSI
@@ -302,10 +303,10 @@ if 1;DISPMSI
 			out dx, eax
 			add dx, 4
 			in eax, dx		; type in AL, next cap in AH
-			.break .if al == CAPID_MSI
+			.break .if al == PCICAPID_MSI
 			mov al, ah
 		.endw
-		.if al == CAPID_MSI
+		.if al == PCICAPID_MSI
 			bt eax, 16	; MSI enabled?
 			.if CARRY?
 				invoke printf, CStr(" E")	; MSI enabled

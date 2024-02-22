@@ -221,13 +221,14 @@ endif
 				.break .if ah != 0
 				movzx eax,ch
 				movzx ecx,cl
-				mov edi, eax
+				push eax
 				.if ecx < NUMCAPSTR
 					mov eax, [ecx*4][capstrgs]
 				.else
 					mov eax, CStr("unknown")
 				.endif
-				invoke printf, CStr("  capabilities ID=0x%X (%s)",lf), ecx, eax
+				invoke printf, CStr("  %X: capabilities ID=0x%X (%s)",lf), edi, ecx, eax
+				pop edi
 			.until edi == 0
 		.endif
 	.endif

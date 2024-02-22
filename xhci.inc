@@ -9,8 +9,8 @@ dwSParams1 dd ?	;+04 Structural Params 1
 dwSParams2 dd ?	;+08 Structural Params 2
 dwSParams3 dd ?	;+0C Structural Params 3
 dwCParams1 dd ?	;+10 Capability Params 1
-dwDBOfs dd ?	;+14 Doorbell Offset
-dwRTSOfs dd ?	;+18 Runtime Registers Space Offset
+dwDBOfs dd ?	;+14 2-31: Doorbell Offset; 0-1 rsvd
+dwRTSOfs dd ?	;+18 5-31: Runtime Registers Space Offset; 0-4 rsvd
 dwCParams2 dd ?	;+1C Capability Params 2
 XHCICAP ends
 
@@ -28,7 +28,7 @@ dwDCBAAP dd ?	; +30 Device Context Base Address Array Pointer
 		dd ?
 dwConfig dd ?	; +38 Configure
 ;--- ofs 3C-3FF reserved
-;--- 400h-13ffh Port Register Set 1 - MaxPorts
+;--- 400h-13ffh Port Register Set 1 - MaxPorts (see below)
 XHCIOP ends
 
 ;--- Port Register Set
@@ -41,18 +41,37 @@ dwHLPMC	dd ?	; Port Hardware LPM Control
 XHCIPRS ends
 
 ;--- XHCI RunTime Registers:
+;--- a XHCIIRS struct, followed by n XHCIIR structs
 
-XHCIRT struct
-XHCIRT ends
+;--- Interrupter Register Set
+
+XHCIIRS struct
+dwMFIdx dd ?	; +00 0-13:Microframe Index, 14-31 rsvd
+		dd ?,?,?; +04-0F: rsvd
+		dd ?,?,?,?	; +10-1F rsvd
+XHCIIRS ends
+
+;--- Interrupter Registers
+
+XHCIIR struct
+dwIMR	dd ?	; +00 Interrupter Management Register; 0-1, 2-31 rsvd
+dwIMod	dd ?	; +04 Interrupter Moderation Interval 0-15; 16-31:counter
+dwERSTSiz dd ?	; +08 0-15: Event Ring Segment Table Size; 16-31: rsvd
+		dd ?	; +0C rsvd
+dwERSTBAlo	dd ?; +10 6-31: Event ring segment table base address low
+dwERSTBAhi	dd ?; +14 Event ring segment table base address high
+dwERDPlo	dd ?; +18 4-31: Event Ring Dequeue Pointer low; 0-2: DESI, 3:EHB
+dwERDPhi	dd ?; +1C Event Ring Dequeue Pointer high
+XHCIIR ends
 
 ;--- Structural Params 1
 ;--- 0-7: Number of Device Slots (MaxSlots)
 ;--- 8-18: Number of Interruptors
 ;--- 19-23: reserved
-;--- 23-31: Number of Ports
+;--- 23-31: Number of Ports (MaxPorts)
 
 ;--- Structural Params 2
-;--- ß-3: IST
+;--- 0-3: IST
 ;--- 4-7: ERST
 ;--- 8-20: rsvd.
 ;--- 21-25: Max Scratchpad Buffers High
@@ -89,9 +108,4 @@ XHCIRT ends
 ;--- 14: Extended TBC Enable
 ;--- 15: Extended TBC TRB Status Enable
 ;--- 16: RW; VTIO Enable
-
-;--- PCI header, offset 0D0h
-;--- USB3_PSSEN <- -1 to switch to superspeed
-;--- PCI header, offset 0D8h
-;--- XUSP2PR <- -1 to switch to USB2
 

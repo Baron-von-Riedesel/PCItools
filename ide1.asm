@@ -3,6 +3,7 @@
 	.model flat
 
 @pe_file_flags = @pe_file_flags and not 1	;create binary with base relocations
+lf equ 10
 
 PUSHADS struct
 _edi dd ?
@@ -22,6 +23,8 @@ sym db text,0
 	.code
 	exitm <offset sym>
 endm
+
+	include pci.inc
 
 	.data
 
@@ -66,9 +69,9 @@ local dwBase5:dword
 nextport:
 	mov eax, ecx
 	out dx, eax
-	add dx, 4
+	add edx, 4
 	in eax, dx
-	sub dx, 4
+	sub edx, 4
 	cmp eax, -1
 	jz skipaddr
 	shr eax, 8
@@ -101,7 +104,7 @@ nextport:
 	and eax, eax
 	jnz @F
 	invoke printf, CStr("SATA controller, AHCI mode enabled",10)
-	jmp dispdone
+	jmp ctypedone
 @@:
 	mov cl,16+0*4
 	call getbase
@@ -115,6 +118,39 @@ nextport:
 	call getbase
 	mov dwBase5, eax
 	invoke printf, CStr("pri=%X/%X sec=%X/%X dma=%X",10), dwBase1, dwBase2, dwBase3, dwBase4, dwBase5
+ctypedone:
+
+	mov eax, [esp].PUSHADS._ecx
+	mov edx, [esp].PUSHADS._edx
+	mov al, 4
+	out dx, eax
+	add edx, 4
+	in eax, dx
+	bt eax, 20		; capability list exists?
+	.if CARRY?
+		mov eax, [esp].PUSHADS._ecx
+		mov al, 34h
+		sub edx, 4
+		out dx, eax
+		add edx, 4
+		in eax, dx
+		movzx eax, al
+		.while al
+			mov cl, al
+			mov eax, [esp].PUSHADS._ecx
+			mov al, cl
+			sub edx, 4
+			out dx, eax
+			add edx, 4
+			in eax, dx		; type in AL, next cap in AH
+			.break .if al == PCICAPID_DIC
+			mov al, ah
+		.endw
+		.if al == PCICAPID_DIC
+			invoke printf, CStr("SATA Data/Index Capabilities exist", lf)
+		.endif
+	.endif
+
 dispdone:
 	popad
 skipaddr:
@@ -125,9 +161,9 @@ skipaddr:
 getbase:
 	mov eax, ecx
 	out dx, eax
-	add dl, 4
+	add edx, 4
 	in eax, dx
-	sub dl, 4
+	sub edx, 4
 	add cl, 4
 	and al, 0feh
 	retn
